@@ -53,59 +53,55 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+
             // Validate the form before submission
             if (!validateForm()) {
-                event.preventDefault();
                 return false;
             }
-            
-            // Add the +91 prefix to the phone number for submission
-            const phoneInput = document.getElementById('phone');
-            if (phoneInput) {
-                const formattedPhone = "+91" + phoneInput.value;
-                // Create a temporary hidden input for the formatted phone
-                const formattedPhoneInput = document.createElement('input');
-                formattedPhoneInput.type = 'hidden';
-                formattedPhoneInput.name = 'formatted_phone';
-                formattedPhoneInput.value = formattedPhone;
-                appointmentForm.appendChild(formattedPhoneInput);
+
+            const submitBtn = document.getElementById('submit-btn');
+            const originalBtnText = submitBtn ? submitBtn.innerText : 'Book Appointment';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerText = 'Submitting...';
             }
             
-            // If using Formspree and the form is valid, handle submission
-            // This code handles the form submission without page reload
-            event.preventDefault();
-            
             const formData = new FormData(appointmentForm);
-            const formAction = appointmentForm.getAttribute('action');
+
+            // Format phone number with country prefix
+            const rawPhone = formData.get('phone');
+            if (rawPhone && !rawPhone.startsWith('+91')) {
+                formData.set('phone', '+91 ' + rawPhone);
+            }
+
+            // Convert FormData to JSON for Web3Forms API
+            const jsonObject = Object.fromEntries(formData);
+            const jsonBody = JSON.stringify(jsonObject);
             
-            // Add a hidden honeypot field for spam protection
-            const honeypot = document.createElement('input');
-            honeypot.type = 'text';
-            honeypot.name = '_gotcha';
-            honeypot.value = '';
-            honeypot.style.display = 'none';
-            appointmentForm.appendChild(honeypot);
-            
-            fetch(formAction, {
+            fetch('https://api.web3forms.com/submit', {
                 method: 'POST',
-                body: formData,
                 headers: {
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
-                }
+                },
+                body: jsonBody
             })
-            .then(response => {
-                if (response.ok) {
-                    // Redirect to thank you page on successful submission
+            .then(async (response) => {
+                const data = await response.json();
+                if (response.status === 200) {
                     window.location.href = 'thank-you.html';
                 } else {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Form submission failed');
-                    });
+                    throw new Error(data.message || 'Form submission failed');
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showFormError(error.message);
+                console.error('Submission Error:', error);
+                showFormError(error.message || 'There was a problem submitting your form. Please try again.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = originalBtnText;
+                }
             });
         });
     }
